@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Mostrar Descrições - Power-Up</title>
+    <!-- 1. Carrega a biblioteca oficial do Trello -->
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <style>
+        /* Estilos base (escondem a barra de rolagem e limpam margens) */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: #fff;
+            color: #172b4d;
+            overflow: hidden;
+        }
+
+        /* Container do interruptor (escondido por padrão) */
+        #settings-container {
+            display: none;
+            padding: 16px;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .title { font-weight: 600; font-size: 14px; }
+        
+        /* Design do botão de Liga/Desliga */
+        .switch { position: relative; display: inline-block; width: 40px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #091e4224; transition: .3s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; border-radius: 50%; transition: .3s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        input:checked + .slider { background-color: #0079bf; }
+        input:checked + .slider:before { transform: translateX(16px); }
+    </style>
+</head>
+<body>
+
+    <!-- A Interface que aparece no Popup -->
+    <div id="settings-container">
+        <span class="title">Mostrar descrições nos cartões</span>
+        <label class="switch">
+            <input type="checkbox" id="toggleSwitch">
+            <span class="slider"></span>
+        </label>
+    </div>
+
+    <script>
+        // Lógica de Roteamento: Verifica qual tela o Trello pediu para abrir
+        const isSettingsMode = window.location.search.includes('mode=settings');
+
+        if (isSettingsMode) {
+            
+            // ==============================================================
+            // TELA 1: MODO POPUP DE CONFIGURAÇÕES (Quando clica no botão)
+            // ==============================================================
+            document.getElementById('settings-container').style.display = 'flex';
+            const t = window.TrelloPowerUp.iframe();
+
+            // Puxa o estado atual (salvo) do botão
+            t.render(function() {
+                t.get('board', 'shared', 'showDescriptions', true).then(function(isActive) {
+                    document.getElementById('toggleSwitch').checked = isActive;
+                });
+            });
+
+            // Quando o usuário clica no botão, salva a preferência
+            document.getElementById('toggleSwitch').addEventListener('change', function(e) {
+                t.set('board', 'shared', 'showDescriptions', e.target.checked);
+            });
+
+        } else {
+            
+            // ==============================================================
+            // TELA 2: MODO INVISÍVEL (Carrega o botão e as descrições no quadro)
+            // ==============================================================
+            window.TrelloPowerUp.initialize({
+                
+                // A. Cria o botão "Descrições" no topo do quadro
+                'board-buttons': function(t, options) {
+                    return [{
+                        text: 'Descrições',
+                        callback: function(t) {
+                            // Abre o popup usando o modo settings
+                            return t.popup({
+                                title: 'Configurações',
+                                url: './index.html?mode=settings',
+                                height: 80
+                            });
+                        }
+                    }];
+                },
+
+                // B. Cria os Badges na frente do cartão (A Mágica acontece aqui)
+                'card-badges': function(t, options) {
+                    return t.get('board', 'shared', 'showDescriptions', true).then(function(isActive) {
+                        
+                        // Se estiver desligado nas configurações, não mostra nada
+                        if (!isActive) return []; 
+
+                        return t.card('desc').then(function(card) {
+                            if (!card.desc) return []; // Se o cartão não tiver descrição, ignora
+                            
+                            // Remove caracteres especiais de Markdown para deixar o texto limpo
+                            let plainText = card.desc
+                                .replace(/#+\s/g, '') 
+                                .replace(/[*_~`>]/g, '') 
+                                .replace(/\n/g, ' ') 
+                                .trim();
+
+                            if (plainText.length === 0) return [];
+
+                            // Pega os primeiros 45 caracteres e adiciona "..."
+                            let preview = plainText.length > 45 ? plainText.substring(0, 45) + '...' : plainText;
+
+                            return [{
+                                text: preview,
+                                color: 'blue' // Cor do selo da descrição
+                            }];
+                        });
+                    });
+                }
+            });
+        }
+    </script>
+</body>
+</html>
