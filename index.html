@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <title>Mostrar Descrições - Power-Up</title>
-    <!-- 1. Carrega a biblioteca oficial do Trello -->
+    <!-- Carrega a biblioteca oficial do Trello -->
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
     <style>
-        /* Estilos base (escondem a barra de rolagem e limpam margens) */
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
@@ -15,110 +14,175 @@
             overflow: hidden;
         }
 
-        /* Container do interruptor (escondido por padrão) */
+        /* Container do popup atualizado */
         #settings-container {
             display: none;
             padding: 16px;
-            flex-direction: row;
+        }
+        .settings-group {
+            display: flex;
+            flex-direction: column;
+            gap: 16px; /* Espaço entre as opções */
+        }
+        .setting-row {
+            display: flex;
             align-items: center;
             justify-content: space-between;
         }
-        
         .title { font-weight: 600; font-size: 14px; }
         
-        /* Design do botão de Liga/Desliga */
+        /* Design do Toggle */
         .switch { position: relative; display: inline-block; width: 40px; height: 24px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #091e4224; transition: .3s; border-radius: 24px; }
         .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; border-radius: 50%; transition: .3s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
         input:checked + .slider { background-color: #0079bf; }
         input:checked + .slider:before { transform: translateX(16px); }
+
+        /* Design do Dropdown (Seleção de linhas) */
+        select {
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #dfe1e6;
+            background-color: #fafbfc;
+            color: #172b4d;
+            font-size: 14px;
+            cursor: pointer;
+            outline: none;
+            font-weight: 500;
+        }
+        select:hover { background-color: #ebecf0; }
     </style>
 </head>
 <body>
 
     <!-- A Interface que aparece no Popup -->
     <div id="settings-container">
-        <span class="title">Mostrar descrições nos cartões</span>
-        <label class="switch">
-            <input type="checkbox" id="toggleSwitch">
-            <span class="slider"></span>
-        </label>
+        <div class="settings-group">
+            <div class="setting-row">
+                <span class="title">Mostrar descrições</span>
+                <label class="switch">
+                    <input type="checkbox" id="toggleSwitch">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="setting-row">
+                <span class="title">Limitar a:</span>
+                <select id="linesSelect">
+                    <option value="1">1 Linha</option>
+                    <option value="2">2 Linhas</option>
+                    <option value="3">3 Linhas</option>
+                    <option value="4">4 Linhas</option>
+                    <option value="5">5 Linhas</option>
+                </select>
+            </div>
+        </div>
     </div>
 
     <script>
-        // Lógica de Roteamento: Verifica qual tela o Trello pediu para abrir
         const isSettingsMode = window.location.search.includes('mode=settings');
 
         if (isSettingsMode) {
             
             // ==============================================================
-            // TELA 1: MODO POPUP DE CONFIGURAÇÕES (Quando clica no botão)
+            // MODO POPUP: Mostra o Toggle e o Dropdown
             // ==============================================================
-            document.getElementById('settings-container').style.display = 'flex';
+            document.getElementById('settings-container').style.display = 'block';
             const t = window.TrelloPowerUp.iframe();
 
-            // Puxa o estado atual (salvo) do botão
             t.render(function() {
+                // Recupera se o botão está ligado
                 t.get('board', 'shared', 'showDescriptions', true).then(function(isActive) {
                     document.getElementById('toggleSwitch').checked = isActive;
                 });
+                // Recupera a quantidade de linhas salvas (Padrão: 1)
+                t.get('board', 'shared', 'descriptionLines', 1).then(function(lines) {
+                    document.getElementById('linesSelect').value = lines;
+                });
             });
 
-            // Quando o usuário clica no botão, salva a preferência
+            // Salva imediatamente quando o usuário altera algo
             document.getElementById('toggleSwitch').addEventListener('change', function(e) {
                 t.set('board', 'shared', 'showDescriptions', e.target.checked);
+            });
+            document.getElementById('linesSelect').addEventListener('change', function(e) {
+                t.set('board', 'shared', 'descriptionLines', parseInt(e.target.value));
             });
 
         } else {
             
             // ==============================================================
-            // TELA 2: MODO INVISÍVEL (Carrega o botão e as descrições no quadro)
+            // MODO MOTOR DO QUADRO: Cria os Badges de Múltiplas Linhas
             // ==============================================================
             window.TrelloPowerUp.initialize({
                 
-                // A. Cria o botão "Descrições" no topo do quadro
                 'board-buttons': function(t, options) {
                     return [{
                         text: 'Descrições',
                         callback: function(t) {
-                            // Abre o popup usando o modo settings
                             return t.popup({
                                 title: 'Configurações',
                                 url: './index.html?mode=settings',
-                                height: 80
+                                height: 120 // Altura aumentada para caber as duas opções!
                             });
                         }
                     }];
                 },
 
-                // B. Cria os Badges na frente do cartão (A Mágica acontece aqui)
                 'card-badges': function(t, options) {
-                    return t.get('board', 'shared', 'showDescriptions', true).then(function(isActive) {
+                    // Puxa 3 coisas ao mesmo tempo: Liga/Desliga, Número de Linhas e o Texto
+                    return Promise.all([
+                        t.get('board', 'shared', 'showDescriptions', true),
+                        t.get('board', 'shared', 'descriptionLines', 1),
+                        t.card('desc')
+                    ]).then(function(values) {
+                        const isActive = values[0];
+                        const numLines = parseInt(values[1]);
+                        const card = values[2];
+
+                        if (!isActive || !card.desc) return []; 
+
+                        let plainText = card.desc
+                            .replace(/#+\s/g, '') 
+                            .replace(/[*_~`>]/g, '') 
+                            .replace(/\n/g, ' ') 
+                            .trim();
+
+                        if (plainText.length === 0) return [];
+
+                        // === A MÁGICA DA QUEBRA DE LINHAS ===
+                        let badges = [];
+                        let words = plainText.split(' ');
+                        let currentLine = '';
+
+                        // Agrupa palavras até bater +- 40 caracteres por "selo"
+                        for (let word of words) {
+                            if (badges.length >= numLines) break; // Para se atingiu o limite escolhido
+
+                            if ((currentLine + word).length > 40) {
+                                badges.push({ text: currentLine.trim(), color: 'blue' });
+                                currentLine = word + ' ';
+                            } else {
+                                currentLine += word + ' ';
+                            }
+                        }
                         
-                        // Se estiver desligado nas configurações, não mostra nada
-                        if (!isActive) return []; 
+                        // Adiciona a sobra na última linha permitida
+                        if (currentLine.trim() !== '' && badges.length < numLines) {
+                            badges.push({ text: currentLine.trim(), color: 'blue' });
+                        }
 
-                        return t.card('desc').then(function(card) {
-                            if (!card.desc) return []; // Se o cartão não tiver descrição, ignora
-                            
-                            // Remove caracteres especiais de Markdown para deixar o texto limpo
-                            let plainText = card.desc
-                                .replace(/#+\s/g, '') 
-                                .replace(/[*_~`>]/g, '') 
-                                .replace(/\n/g, ' ') 
-                                .trim();
+                        // Coloca os "..." no final da última linha, se o texto tiver sido cortado
+                        let displayedTextLength = badges.map(b => b.text).join(' ').length;
+                        if (plainText.length > displayedTextLength && badges.length > 0) {
+                            let lastIdx = badges.length - 1;
+                            let lastText = badges[lastIdx].text;
+                            if (lastText.length > 37) lastText = lastText.substring(0, 37); // Garante espaço para "..."
+                            badges[lastIdx].text = lastText + '...';
+                        }
 
-                            if (plainText.length === 0) return [];
-
-                            // Pega os primeiros 45 caracteres e adiciona "..."
-                            let preview = plainText.length > 45 ? plainText.substring(0, 45) + '...' : plainText;
-
-                            return [{
-                                text: preview,
-                                color: 'blue' // Cor do selo da descrição
-                            }];
-                        });
+                        // Retorna a lista de selos. O Trello empilha eles visualmente como linhas!
+                        return badges;
                     });
                 }
             });
